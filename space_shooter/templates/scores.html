@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <title>Space Shooter – Žebříček</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #05051a; color: #fff; font-family: 'Courier New', monospace; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; }
+    h1 { color: #00eeff; letter-spacing: 4px; margin-bottom: 2rem; font-size: 2rem; }
+    table { width: 100%; max-width: 600px; border-collapse: collapse; }
+    th { color: #aaa; text-align: left; padding: 0.6rem 1rem; border-bottom: 1px solid #ffffff22; font-size: 0.8rem; letter-spacing: 2px; }
+    td { padding: 0.7rem 1rem; border-bottom: 1px solid #ffffff0d; }
+    tr:nth-child(1) td { color: #ffd700; }
+    tr:nth-child(2) td { color: #c0c0c0; }
+    tr:nth-child(3) td { color: #cd7f32; }
+    .back { display: inline-block; margin-top: 2rem; padding: 0.7rem 2rem; border: 1px solid #00eeff; color: #00eeff; border-radius: 8px; text-decoration: none; letter-spacing: 2px; font-size: 0.9rem; transition: background 0.2s; }
+    .back:hover { background: #00eeff22; }
+  </style>
+</head>
+<body>
+  <h1>🏆 ŽEBŘÍČEK</h1>
+  <table>
+    <tr><th>#</th><th>Jméno</th><th>Skóre</th><th>Level</th><th>Asteroidy</th><th>Datum</th></tr>
+    {% for s in scores %}
+    <tr>
+      <td>{% if loop.index==1 %}🥇{% elif loop.index==2 %}🥈{% elif loop.index==3 %}🥉{% else %}{{ loop.index }}{% endif %}</td>
+      <td>{{ s.name }}</td><td>{{ s.score }}</td><td>{{ s.level }}</td><td>{{ s.asteroids }}</td>
+      <td style="color:#666;font-size:0.8rem">{{ s.date }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <a href="/" class="back">← ZPĚT NA HLAVNÍ STRÁNKU</a>
+</body>
+</html>

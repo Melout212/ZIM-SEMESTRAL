@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <title>Space Shooter – Hra</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #05051a; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; font-family: 'Courier New', monospace; color: #fff; }
+    canvas { display: block; border: 1px solid #ffffff22; border-radius: 8px; }
+    #hud { display: flex; justify-content: space-between; width: 600px; padding: 0.5rem 0; font-size: 0.9rem; color: #aaa; }
+    #hud span { color: #00eeff; font-weight: bold; }
+    #controls { margin-top: 0.5rem; font-size: 0.75rem; color: #555; letter-spacing: 1px; }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div>HRÁČ: <span>{{ player_name }}</span></div>
+    <div>SKÓRE: <span id="hud-score">0</span></div>
+    <div>ŽIVOTY: <span id="hud-lives">♥ ♥ ♥</span></div>
+    <div>LEVEL: <span id="hud-level">1</span></div>
+  </div>
+  <canvas id="c" width="600" height="520"></canvas>
+  <div id="controls">← → POHYB &nbsp;|&nbsp; MEZERNÍK STŘELBA &nbsp;|&nbsp; ESC MENU</div>
+
+  <script>
+    const PLAYER_NAME = "{{ player_name }}";
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+
+    // --- Herní stav ---
+    let score = 0, lives = 3, level = 1, destroyed = 0;
+    let gameOver = false;
+    let bullets = [], asteroids = [], particles = [], stars = [];
+    let shootCooldown = 0, asteroidTimer = 0;
+    let keys = {};
+
+    // --- Hvězdy na pozadí ---
+    for (let i = 0; i < 130; i++) {
+      stars.push({ x: Math.random()*600, y: Math.random()*520, r: Math.random()*1.8+0.3, a: Math.random() });
+    }
+
+    // --- Loď (OOP třída) ---
+    class Ship {
+      constructor() { this.x = 300; this.y = 460; this.w = 20; this.h = 26; this.invincible = 0; }
+      update() {
+        if (keys['ArrowLeft']) this.x = Math.max(22, this.x - 5);
+        if (keys['ArrowRight']) this.x = Math.min(578, this.x + 5);
+        if (this.invincible > 0) this.invincible--;
+      }
+      draw() {
+        if (this.invincible > 0 && Math.floor(this.invincible/5) % 2) return;
+        ctx.save(); ctx.translate(this.x, this.y);
+        ctx.fillStyle = '#00eeff';
+        ctx.beginPath();
+        ctx.moveTo(0,-this.h); ctx.lineTo(-this.w, this.h);
+        ctx.lineTo(-7, this.h-10); ctx.lineTo(7, this.h-10); ctx.lineTo(this.w, this.h);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ffffff33';
+        ctx.beginPath(); ctx.moveTo(0,-this.h+6); ctx.lineTo(-5,4); ctx.lineTo(5,4); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+      rect() { return { x: this.x-18, y: this.y-22, w: 36, h: 44 }; }
+    }
+
+    // --- Projektil (OOP třída) ---
+    class Bullet {
+      constructor(x, y) { this.x = x; this.y = y; this.alive = true; }
+      update() { this.y -= 11; if (this.y < 0) this.alive = false; }
+      draw() {
+        ctx.fillStyle = '#ffe000';
+        ctx.fillRect(this.x-2, this.y-10, 5, 14);
+        ctx.fillStyle = '#fff8';
+        ctx.fillRect(this.x-1, this.y-10, 3, 5);
+      }
+      rect() { return { x: this.x-3, y: this.y-10, w: 6, h: 14 }; }
+    }
+
+    // --- Asteroid (OOP třída) ---
+    class Asteroid {
+      constructor() {
+        this.x = Math.random()*560+20; this.y = -30;
+        this.radius = Math.random()*22+16;
+        this.vx = (Math.random()-.5)*2.2;
+        this.vy = Math.random()*1.5+1.2 + level*0.22;
+        this.rot = 0; this.rotSpeed = (Math.random()-.5)*0.04;
+        this.alive = true;
+        this.pts = [];
+        for (let i=0; i<10; i++) {
+          const a = (i/10)*Math.PI*2;
+          const r = this.radius*(0.72+Math.random()*0.28);
+          this.pts.push([Math.cos(a)*r, Math.sin(a)*r]);
+        }
+      }
+      update() {
+        this.x += this.vx; this.y += this.vy; this.rot += this.rotSpeed;
+        if (this.x < -60) this.x = 660; if (this.x > 660) this.x = -60;
+        if (this.y > 580) this.alive = false;
+      }
+      draw() {
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.rot);
+        const c = Math.cos, s = Math.sin;
+        ctx.beginPath();
+        ctx.moveTo(this.pts[0][0], this.pts[0][1]);
+        for (const [px,py] of this.pts) ctx.lineTo(px,py);
+        ctx.closePath();
+        ctx.fillStyle = '#4a3a22'; ctx.fill();
+        ctx.strokeStyle = '#c8a060'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.restore();
+      }
+      rect() { const r=this.radius; return { x:this.x-r, y:this.y-r, w:r*2, h:r*2 }; }
+      points() { return Math.max(10, Math.round(50 - this.radius)); }
+    }
+
+    // --- Částice (exploze) ---
+    class Particle {
+      constructor(x,y) {
+        this.x=x; this.y=y;
+        this.vx=(Math.random()-.5)*5; this.vy=(Math.random()-.5)*5;
+        this.life=1; this.decay=Math.random()*0.05+0.03;
+        this.r=Math.random()*4+1;
+        const colors=['#ff8800','#ffdd00','#ff4400','#ffffff'];
+        this.color=colors[Math.floor(Math.random()*colors.length)];
+      }
+      update() { this.x+=this.vx; this.y+=this.vy; this.life-=this.decay; }
+      draw() {
+        ctx.globalAlpha=this.life;
+        ctx.fillStyle=this.color;
+        ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2); ctx.fill();
+        ctx.globalAlpha=1;
+      }
+    }
+
+    const ship = new Ship();
+
+    // --- Kolize ---
+    function collides(a, b) {
+      return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
+    }
+
+    function spawnExplosion(x, y, count=12) {
+      for (let i=0; i<count; i++) particles.push(new Particle(x,y));
+    }
+
+    // --- Aktualizace HUD ---
+    function updateHUD() {
+      document.getElementById('hud-score').textContent = score;
+      document.getElementById('hud-level').textContent = level;
+      let h = '';
+      for (let i=0;i<lives;i++) h += '♥ ';
+      document.getElementById('hud-lives').textContent = h.trim() || '✗';
+    }
+
+    // --- Uložení skóre na server ---
+    async function saveScore() {
+      try {
+        await fetch('/api/score', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: PLAYER_NAME, score, level, asteroids: destroyed })
+        });
+      } catch(e) {}
+    }
+
+    // --- Vykreslení game over obrazovky ---
+    function drawGameOver() {
+      ctx.fillStyle = '#000000aa';
+      ctx.fillRect(0,0,600,520);
+      ctx.fillStyle = '#ff4444';
+      ctx.font = 'bold 48px Courier New';
+      ctx.textAlign = 'center';
+      ctx.fillText('GAME OVER', 300, 210);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '22px Courier New';
+      ctx.fillText(`${PLAYER_NAME} · Skóre: ${score}`, 300, 265);
+      ctx.fillText(`Level: ${level} · Asteroidy: ${destroyed}`, 300, 300);
+      ctx.fillStyle = '#00eeff';
+      ctx.font = '16px Courier New';
+      ctx.fillText('[ R ] Hrát znovu    [ ESC ] Menu', 300, 360);
+      ctx.textAlign = 'left';
+    }
+
+    // --- Hlavní herní smyčka ---
+    function loop() {
+      ctx.fillStyle = '#05051a';
+      ctx.fillRect(0,0,600,520);
+
+      // Hvězdy
+      for (const st of stars) {
+        ctx.globalAlpha = 0.4 + st.a*0.6;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(st.x, st.y, st.r, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      if (!gameOver) {
+        ship.update();
+
+        // Střelba
+        if (shootCooldown > 0) shootCooldown--;
+        if (keys[' '] && shootCooldown === 0) {
+          bullets.push(new Bullet(ship.x, ship.y - 24));
+          shootCooldown = 18;
+        }
+
+        // Spawn asteroidů
+        asteroidTimer++;
+        const interval = Math.max(22, 58 - level*3);
+        if (asteroidTimer >= interval) { asteroidTimer=0; asteroids.push(new Asteroid()); }
+
+        // Update objektů
+        for (const b of bullets) b.update();
+        for (const a of asteroids) a.update();
+        for (const p of particles) p.update();
+
+        // Kolize projektil × asteroid
+        for (const b of bullets) {
+          for (const a of asteroids) {
+            if (b.alive && a.alive && collides(b.rect(), a.rect())) {
+              b.alive = false; a.alive = false;
+              score += a.points(); destroyed++;
+              spawnExplosion(a.x, a.y);
+              if (destroyed % 8 === 0) level++;
+              updateHUD();
+            }
+          }
+        }
+
+        // Kolize loď × asteroid
+        if (ship.invincible === 0) {
+          for (const a of asteroids) {
+            if (a.alive && collides(ship.rect(), a.rect())) {
+              a.alive = false;
+              spawnExplosion(ship.x, ship.y, 20);
+              lives--;
+              ship.invincible = 120;
+              updateHUD();
+              if (lives <= 0) { gameOver = true; saveScore(); }
+            }
+          }
+        }
+
+        // Čištění mrtvých objektů
+        bullets = bullets.filter(b=>b.alive);
+        asteroids = asteroids.filter(a=>a.alive);
+        particles = particles.filter(p=>p.life>0);
+      }
+
+      // Kreslení
+      for (const p of particles) p.draw();
+      for (const a of asteroids) a.draw();
+      for (const b of bullets) b.draw();
+      ship.draw();
+
+      if (gameOver) drawGameOver();
+
+      requestAnimationFrame(loop);
+    }
+
+    // --- Klávesnice ---
+    document.addEventListener('keydown', e => {
+      keys[e.key] = true;
+      if (e.key === ' ') e.preventDefault();
+      if (e.key === 'Escape') window.location.href = '/';
+      if (e.key === 'r' || e.key === 'R') {
+        if (gameOver) window.location.reload();
+      }
+    });
+    document.addEventListener('keyup', e => keys[e.key] = false);
+
+    updateHUD();
+    loop();
+  </script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+[
+  {
+    "name": "1",
+    "score": 804,
+    "level": 5,
+    "asteroids": 37,
+    "date": "18.03.2026 19:12"
+  },
+  {
+    "name": "de",
+    "score": 467,
+    "level": 3,
+    "asteroids": 19,
+    "date": "18.03.2026 20:00"
+  },
+  {
+    "name": "fdgfdg",
+    "score": 270,
+    "level": 2,
+    "asteroids": 13,
+    "date": "18.03.2026 19:17"
+  },
+  {
+    "name": "Hráč",
+    "score": 137,
+    "level": 1,
+    "asteroids": 7,
+    "date": "18.03.2026 19:22"
+  },
+  {
+    "name": "Hráč",
+    "score": 119,
+    "level": 1,
+    "asteroids": 6,
+    "date": "18.03.2026 19:13"
+  },
+  {
+    "name": "N1",
+    "score": 0,
+    "level": 1,
+    "asteroids": 0,
+    "date": "18.03.2026 19:12"
+  }
+]
